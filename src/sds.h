@@ -40,17 +40,24 @@ const char *SDS_NOINIT;
 #include <stdarg.h>
 #include <stdint.h>
 
+// sds就是char *的别名，它兼容C风格字符串
 typedef char *sds;
 
+// 在字符串前嵌入的头部，根据字符串大小，使用不同的头部，对小字符串用窄一点的类型，优化内存
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
+ // 已经弃用，不用看
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };
+
 struct __attribute__ ((__packed__)) sdshdr8 {
+    // 记录字符串长度，结果和strlen一致
     uint8_t len; /* used */
+    // 包括该sds申请（malloc）时的请求了多大内存，它不包括头部和0x0。也就是说malloc时申请的内存 = alloc + 头部长度 + 1
     uint8_t alloc; /* excluding the header and null terminator */
+    // 这个标记位，用来指示嵌入的头部是哪种头部类型
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
@@ -84,6 +91,11 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+// 获取sds的len字段
+// 为了兼容C风格字符串，sds对使用者暴露的是字符串的第一个字节。
+// 为了拿到头部，sds得要减去一个偏移量，这个偏移量等于头部大小。
+// 而头部的类型，存储在flags字段里，由于所有的头部类型flags字段相对字符串第一个字节的偏移量是固定的（为1），所以直接*(s - 1)就拿到flags字节
+// 后面的函数，都有类似的操作
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -101,6 +113,7 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+// sds空闲的内存块，还能再容纳多少字节？直接alloc - len即可
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -127,6 +140,8 @@ static inline size_t sdsavail(const sds s) {
     return 0;
 }
 
+// 字符串长度，不包括\0
+// 实现直接取len字段即可
 static inline void sdssetlen(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -177,6 +192,8 @@ static inline void sdsinclen(sds s, size_t inc) {
 }
 
 /* sdsalloc() = sdsavail() + sdslen() */
+// sds占用的内存，不包括头部和0x0
+// 实现直接取alloc字段即可
 static inline size_t sdsalloc(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -194,6 +211,7 @@ static inline size_t sdsalloc(const sds s) {
     return 0;
 }
 
+// alloc的setter
 static inline void sdssetalloc(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {

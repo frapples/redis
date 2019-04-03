@@ -32,9 +32,17 @@
 #define __ZMALLOC_H
 
 /* Double expansion needed for stringification of macro values. */
+
+// 字符串拼接宏，C语言的惯用法
 #define __xstr(s) __str(s)
 #define __str(s) #s
 
+
+// 条件编译，通过宏字段，编译期确定使用的内存分配器
+// 指定TCMALLOC宏就用tcmalloc，指定JEMALLOC宏就用jemalloc，这两都是第三方提供的高性能、低内存碎片内存分配器
+// 没指定的话，如果是osx系统(__APPLE__宏)用苹果自带的内存分配器
+// 如果是有__GLIBC__宏，表示有glibc库(linux下的一种标准C库实现），就使用glibc的内存分配器
+// 疑惑：windows呢？也用glibc吗？
 #if defined(USE_TCMALLOC)
 #define ZMALLOC_LIB ("tcmalloc-" __xstr(TC_VERSION_MAJOR) "." __xstr(TC_VERSION_MINOR))
 #include <google/tcmalloc.h>
@@ -77,10 +85,11 @@
 #define HAVE_DEFRAG
 #endif
 
-void *zmalloc(size_t size);
-void *zcalloc(size_t size);
-void *zrealloc(void *ptr, size_t size);
-void zfree(void *ptr);
+// 前面4个，是内存分配器的主要函数，和ANSI C标准库的API类似。
+void *zmalloc(size_t size); // 申请size大小内存，但是不填充0。
+void *zcalloc(size_t size); // 申请size大小内存，但是全部填充0。
+void *zrealloc(void *ptr, size_t size); // 将ptr指向的内存扩容到size大小
+void zfree(void *ptr); // 释放ptr指向的内存
 char *zstrdup(const char *s);
 size_t zmalloc_used_memory(void);
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t));
@@ -96,6 +105,7 @@ void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
 #endif
 
+// 有些内存分配器支持malloc_size函数，即根据指针获取分配的内存大小
 #ifndef HAVE_MALLOC_SIZE
 size_t zmalloc_size(void *ptr);
 #endif

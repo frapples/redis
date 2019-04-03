@@ -32,6 +32,14 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+/* 总结：这个库对内存分配器提供的函数进行二次封装，分为以下特性：
+* 1. 基本的malloc，calloc，realloc，free.
+* 2. 通过宏定义，可在编译器选择不同的内存分配器。
+* 3. 其它监控、统计内存分配的功能，一是内存用量的记录。
+* 2. 二是malloc_size，对于不支持的内存分配器，头部嵌入PREFIX_SIZE解决。
+* 6. 三是其它获取内存使用的函数，通过调用操作系统的API获取。
+*/
+
 /* This function provide us access to the original libc free(). This is useful
  * for instance to free results obtained by backtrace_symbols(). We need
  * to define this function before including zmalloc.h that may shadow the
@@ -83,6 +91,10 @@ void zlibc_free(void *ptr) {
     atomicDecr(used_memory,__n); \
 } while(0)
 
+// 这个库提供了一个内存用量的功能.
+// 首先，这个变量记录已申请的内存大小
+// 其次，update_zmalloc_stat_alloc、update_zmalloc_stat_free函数分别在申请内存、释放内存时维护内存用量
+// 最后，所有的内存分配器，调用上面的两个函数，维护这个变量
 static size_t used_memory = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -93,8 +105,15 @@ static void zmalloc_default_oom(size_t size) {
     abort();
 }
 
+// 这是一个回调函数，当oom的时候，就会调用此函数报错
+// 默认的实现，就是上面那个，很简单，打印消息然后退出
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+// 这个内存分配函数，包装了下内存分配器的内存分配函数，额外做了几件事情
+// 1. 分配失败，调用oom回调函数
+// 2. 维护内存用量的记录
+// 3. 某些内存分配器不是不支持malloc_size()吗？没关系，自己实现一个。
+// 具体做法是，在内存分配时头部嵌入PREFIX_SIZE字节，用于存储该块分配内存的大小。
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
@@ -127,6 +146,7 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
+// 和zmalloc类似，分配不了内存调用oom回调函数；维护内存用量；对于不支持malloc_size()的内存分配器，嵌入一个表示大小的头部
 void *zcalloc(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
@@ -141,6 +161,7 @@ void *zcalloc(size_t size) {
 #endif
 }
 
+// 这个也类似，分配不了内存调用oom回调函数；维护内存用量；对于不支持malloc_size()的内存分配器，嵌入一个表示大小的头部，维护此头部
 void *zrealloc(void *ptr, size_t size) {
 #ifndef HAVE_MALLOC_SIZE
     void *realptr;
@@ -210,12 +231,14 @@ char *zstrdup(const char *s) {
     return p;
 }
 
+// 内存用量的获取
 size_t zmalloc_used_memory(void) {
     size_t um;
     atomicGet(used_memory,um);
     return um;
 }
 
+// 那个OOM回调函数的setter
 void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
     zmalloc_oom_handler = oom_handler;
 }
@@ -339,6 +362,9 @@ int zmalloc_get_allocator_info(size_t *allocated,
  *
  * Example: zmalloc_get_smap_bytes_by_field("Rss:",-1);
  */
+
+// 这个函数是通过OS的功能获取该进程内存使用的相关信息。
+// 由于是读取/proc/self/smaps/文件实现的，所以只在类unix系统下有用。对于非unix，直接返回0.
 #if defined(HAVE_PROC_SMAPS)
 size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
     char line[1024];

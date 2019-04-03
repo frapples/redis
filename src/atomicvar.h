@@ -68,6 +68,9 @@
  * is reported. */
 // #define __ATOMIC_VAR_FORCE_SYNC_MACROS
 
+// 这个函数库，提供了atomic变量的实现。所谓atomic变量，概念上类似java的AtomicInteger系列。
+// 当有原子操作函数可用时（比如gcc编译器、clang编译器等），直接使用原子操作函数实现
+// 和java类似，这些原子操作函数，实际上是利用CPU的CAS指令，性能很高
 #if !defined(__ATOMIC_VAR_FORCE_SYNC_MACROS) && defined(__ATOMIC_RELAXED) && !defined(__sun) && (!defined(__clang__) || !defined(__APPLE__) || __apple_build_version__ > 4210057)
 /* Implementation using __atomic macros. */
 
@@ -98,6 +101,7 @@
 } while(0)
 #define REDIS_ATOMIC_API "sync-builtin"
 
+// 如果没有CAS支持的原子操作函数，就只能用互斥锁保证原子性了，性能不高
 #else
 /* Implementation using pthread mutex. */
 

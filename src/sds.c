@@ -39,8 +39,17 @@
 #include "sds.h"
 #include "sdsalloc.h"
 
+/* sds是 Simple Dynamic Strings缩写，总结：
+* 1. sds字符串，是兼容C风格字符串的，用char *指向字符串头部，0x0结尾。
+* 2. sds在字符串内容之前，嵌入了一个头部(sdshdr结构体), 这个结构体存储字符串的额外信息
+* 3. 由于嵌入了一个结构体，所以取字符串大小是O(1)操作，如果用strlen则是O(n).
+* 4. 和高级语言提供的字符串类似，sds字符串能动态增长。
+* 5. sds字符串有一个优化，根据字符串长度嵌入不同的头部，字符串越小头部就用窄点的类型，省几个字节，内存优化到极致
+*/
+
 const char *SDS_NOINIT = "SDS_NOINIT";
 
+// 辅助函数，头部类型 -> 头部长度
 static inline int sdsHdrSize(char type) {
     switch(type&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
@@ -57,6 +66,7 @@ static inline int sdsHdrSize(char type) {
     return 0;
 }
 
+// 辅助函数，字符串长度 -> 头部类型
 static inline char sdsReqType(size_t string_size) {
     if (string_size < 1<<5)
         return SDS_TYPE_5;
@@ -84,9 +94,11 @@ static inline char sdsReqType(size_t string_size) {
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
+ // initlen指定，在申请内存后，sds能存储最长这么长的字符串
 sds sdsnewlen(const void *init, size_t initlen) {
     void *sh;
     sds s;
+    // 根据initlen，确定头部类型，确定头部大小
     char type = sdsReqType(initlen);
     /* Empty strings are usually created in order to append. Use type 8
      * since type 5 is not good at this. */
@@ -94,13 +106,18 @@ sds sdsnewlen(const void *init, size_t initlen) {
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
 
+    // 申请内存
     sh = s_malloc(hdrlen+initlen+1);
+    // init为SDS_NOINIT和NULL时，表示不用初始化
     if (init==SDS_NOINIT)
         init = NULL;
     else if (!init)
+    // 初始化内存，全0
         memset(sh, 0, hdrlen+initlen+1);
     if (sh == NULL) return NULL;
+    // s指向头部，计算出头部指针
     s = (char*)sh+hdrlen;
+    // fp指向flags，计算出该指针
     fp = ((unsigned char*)s)-1;
     switch(type) {
         case SDS_TYPE_5: {
