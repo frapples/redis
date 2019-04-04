@@ -233,15 +233,20 @@ static inline void sdssetalloc(sds s, size_t newlen) {
     }
 }
 
+// 这几个是构造函数
 sds sdsnewlen(const void *init, size_t initlen);
 sds sdsnew(const char *init);
 sds sdsempty(void);
 sds sdsdup(const sds s);
+// 销毁字符串
 void sdsfree(sds s);
+// 和动态增长有关的函数
 sds sdsgrowzero(sds s, size_t len);
 sds sdscatlen(sds s, const void *t, size_t len);
 sds sdscat(sds s, const char *t);
 sds sdscatsds(sds s, const sds t);
+// 以上部分的几个函数是sds数据结构的核心
+
 sds sdscpylen(sds s, const char *t, size_t len);
 sds sdscpy(sds s, const char *t);
 

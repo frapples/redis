@@ -216,6 +216,7 @@ void sdsclear(sds s) {
  *
  * Note: this does not change the *length* of the sds string as returned
  * by sdslen(), but only the free buffer space we have. */
+// 扩容函数，扩容后的sds字符串要保证能追加addlen大小的字符。也即扩容后的alloc要大于等于原来的len + addlen
 sds sdsMakeRoomFor(sds s, size_t addlen) {
     void *sh, *newsh;
     size_t avail = sdsavail(s);
@@ -229,6 +230,9 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     len = sdslen(s);
     sh = (char*)s-sdsHdrSize(oldtype);
     newlen = (len+addlen);
+    // SDS_MAX_PREALLOC目前是1M。
+    // 即小于1M，扩容后alloc为(len + addlen) * 2
+    // 否则，扩容后alloc为(len + addlen) + SDS_MAX_PREALLOC
     if (newlen < SDS_MAX_PREALLOC)
         newlen *= 2;
     else
@@ -241,6 +245,9 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
      * at every appending operation. */
     if (type == SDS_TYPE_5) type = SDS_TYPE_8;
 
+    // 确定了扩容后的大小后，确定头部类型
+    // 头部类型若不变，直接realloc即可
+    // 头部类型若改变，则要重新分配内存，重新嵌入新的头部类型
     hdrlen = sdsHdrSize(type);
     if (oldtype==type) {
         newsh = s_realloc(sh, hdrlen+newlen+1);
@@ -267,6 +274,7 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+// 这个函数，移除掉多余的内存。也就是说，让申请的内存恰好能容纳下现有的字符串，不多不少，内存节约到极致
 sds sdsRemoveFreeSpace(sds s) {
     void *sh, *newsh;
     char type, oldtype = s[-1] & SDS_TYPE_MASK;
@@ -283,6 +291,8 @@ sds sdsRemoveFreeSpace(sds s) {
      * required, we just realloc(), letting the allocator to do the copy
      * only if really needed. Otherwise if the change is huge, we manually
      * reallocate the string to use the different header type. */
+     // 也是分两种情况
+     // 如果头部类型不变化，直接缩容；如果头部类型变化，则要重新分配内存，并嵌入新头部
     if (oldtype==type || type > SDS_TYPE_8) {
         newsh = s_realloc(sh, oldhdrlen+len+1);
         if (newsh == NULL) return NULL;
@@ -387,6 +397,7 @@ void sdsIncrLen(sds s, ssize_t incr) {
  *
  * if the specified length is smaller than the current length, no operation
  * is performed. */
+ // 扩容sds，使得扩容后的sds能容纳下大小为len的字符串。它会把空闲内存填0
 sds sdsgrowzero(sds s, size_t len) {
     size_t curlen = sdslen(s);
 
