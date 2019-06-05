@@ -38,6 +38,9 @@
  * by the user before to call AlFreeList().
  *
  * On error, NULL is returned. Otherwise the pointer to the new list. */
+
+// 两步走，第一步申请内存；第二步初始化字段。
+// 初始化完成后，就创建了一个空表。此时`size = 0`，`head = tail = NULL`。
 list *listCreate(void)
 {
     struct list *list;
@@ -53,6 +56,9 @@ list *listCreate(void)
 }
 
 /* Remove all the elements from the list without destroying the list itself. */
+// `listEmpty`函数，它将链表中的数据清空。
+// 它遍历一遍所有链表节点，首先通过`free`函数指针释放掉存储的数据。
+// 由于链表不一定拥有数据的所有权，所以释放时如何处理数据由链表使用者自定义。
 void listEmpty(list *list)
 {
     unsigned long len;
@@ -73,6 +79,7 @@ void listEmpty(list *list)
 /* Free the whole list.
  *
  * This function can't fail. */
+// 如果想释放掉整个链表，首先清空，清空后的链表只剩下list结构体，再将list结构体释放。
 void listRelease(list *list)
 {
     listEmpty(list);
@@ -131,6 +138,11 @@ list *listAddNodeTail(list *list, void *value)
     return list;
 }
 
+
+// 代码实现的很清晰，如果`after == AL_START_HEAD`，将数据插入到`old_node`之前；
+// 如果`after`为true（非0值），将数据插入到`old_node`之前； 否则，将数据插入到`old_node`之后。
+
+// 链表的插入，只有节点指针的简单移动，最后维护下`list`对象中`len`、`tail`、`head`字段的值。
 list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     listNode *node;
 
@@ -247,6 +259,9 @@ listNode *listNext(listIter *iter)
  * the original node is used as value of the copied node.
  *
  * The original list both on success or error is never modified. */
+
+// 首先复制`list`结构体，其次复制每个节点，最后“复制”节点指向的数据。
+// 数据的“复制”行为由函数指针`dup`指定。链表使用者自定义不同的`dup`函数，可灵活实现深拷贝也可以实现浅拷贝。
 list *listDup(list *orig)
 {
     list *copy;
@@ -264,6 +279,9 @@ list *listDup(list *orig)
 
         if (copy->dup) {
             value = copy->dup(node->value);
+            // `dup`函数指针调用出现错误时（返回NULL），那么`listDup`函数也应该将错误向上传递。
+            // 此时，已经在堆上分配了一部分的内存，如果直接返回NULL表示复制出错，肯定会免内存泄漏。
+            // 因此，这里要有处理已分配内存的收尾工作.
             if (value == NULL) {
                 listRelease(copy);
                 return NULL;
@@ -287,6 +305,10 @@ list *listDup(list *orig)
  * On success the first matching node pointer is returned
  * (search starts from head). If no matching node exists
  * NULL is returned. */
+
+ // 也是很清晰的实现，通过迭代器一个个去比对给定key与节点中存储的数据是否相等。
+ // 这个“相等”的具体含义，由函数指针match确定。
+ // 所以，链表使用者需要根据数据特点实现match函数指针，可类比成重写java的equals方法。
 listNode *listSearchKey(list *list, void *key)
 {
     listIter iter;
@@ -312,6 +334,7 @@ listNode *listSearchKey(list *list, void *key)
  * and so on. Negative integers are used in order to count
  * from the tail, -1 is the last element, -2 the penultimate
  * and so on. If the index is out of range NULL is returned. */
+// listIndex函数的实现很简单，index是正数就从头部数过去，是负数就从尾部数过去。
 listNode *listIndex(list *list, long index) {
     listNode *n;
 
@@ -344,6 +367,9 @@ void listRotate(list *list) {
 
 /* Add all the elements of the list 'o' at the end of the
  * list 'l'. The list 'other' remains empty but otherwise valid. */
+
+// 由于链表的特点，直接将l链表的尾巴，连接到o链表的头部，最后维护下`list`对象的几个字段，就完事了。时间复杂度O(1)。
+// 完事后，o链表的所有元素都移动到了l链表的后面，o链表成为空表。
 void listJoin(list *l, list *o) {
     if (o->head)
         o->head->prev = l->tail;

@@ -44,40 +44,54 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+// hash表的节点，所有hash冲突的节点串成单链表
 typedef struct dictEntry {
-    void *key;
-    union {
+    void *key; // key指针
+    union { // value。这里做了些优化，如果是基本的整数、浮点数类型，则不需要指针二次寻址，直接放入v域
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
-    struct dictEntry *next;
+    struct dictEntry *next; // 单链表指针
 } dictEntry;
 
+// 这个结构体，打包了几个函数指针。这些逻辑，可以由hash表使用者自定义。
 typedef struct dictType {
+    // hash
     uint64_t (*hashFunction)(const void *key);
+    // 复制key
     void *(*keyDup)(void *privdata, const void *key);
+    // 复制value
     void *(*valDup)(void *privdata, const void *obj);
+    // 比较key
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+    // 释放key
     void (*keyDestructor)(void *privdata, void *key);
+    // 释放value
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+ // hash表结构
 typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    dictEntry **table; // table为dictEntry数组
+    unsigned long size; // table数组长度
+    unsigned long sizemask; // 这个mask，是计算hashcode用的。size=0时，为0；size大于0时，为size - 1
+    unsigned long used; // hash表中元素的个数
 } dictht;
 
+// hash表
 typedef struct dict {
     dictType *type;
+    // 函数指针指向的函数需要的"闭包"数据
     void *privdata;
+    // redis的hash表，是由两个内部数组的。这是因为，redis的rehash，是打碎成片段进行的，不是一次性就rehash完毕。
     dictht ht[2];
+    // 记录rehash进度
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    // 记录当前正在运行的迭代器数量
     unsigned long iterators; /* number of iterators currently running */
 } dict;
 
@@ -148,18 +162,26 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
 
 /* API */
+// 创建hash表
 dict *dictCreate(dictType *type, void *privDataPtr);
+// 扩容hash表
 int dictExpand(dict *d, unsigned long size);
+// 向hash表添加元素
 int dictAdd(dict *d, void *key, void *val);
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
 dictEntry *dictAddOrFind(dict *d, void *key);
+// 向hash表添加元素, 如果存在，则覆盖
 int dictReplace(dict *d, void *key, void *val);
+// 删除hash表的元素
 int dictDelete(dict *d, const void *key);
 dictEntry *dictUnlink(dict *ht, const void *key);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
+// 释放hash表
 void dictRelease(dict *d);
+// 获取hash表元素
 dictEntry * dictFind(dict *d, const void *key);
 void *dictFetchValue(dict *d, const void *key);
+// 缩容hash表，将其剩余空间降至最低
 int dictResize(dict *d);
 dictIterator *dictGetIterator(dict *d);
 dictIterator *dictGetSafeIterator(dict *d);
